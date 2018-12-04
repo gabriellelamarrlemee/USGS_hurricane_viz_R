@@ -98,7 +98,7 @@ server <- function(input, output, session) {
             dyLegend(show="never") %>%
             dyOptions(colors = '#000')
     })
-
+    
     observe({ # Add precip polygons
         leafletProxy("map", data = subset(precip_merge, time == input$time)) %>%
             removeShape(s) %>%
@@ -110,17 +110,17 @@ server <- function(input, output, session) {
     
     observe({ # Add gages
         leafletProxy("map", data = gages_filtered) %>%
-        addCircles(lng = ~dec_long_va, lat = ~dec_lat_va, weight = 5,
-                   radius = 20, popup = ~station_nm, layerId=~station_nm)
+            addCircles(lng = ~dec_long_va, lat = ~dec_lat_va, weight = 5,
+                       radius = 20, popup = ~station_nm, layerId=~station_nm)
     })
-
+    
     observe({ # Add hurricane path
         for (i in unique(pts_wgs84_groups$group)) {
             group_sub <- pts_wgs84_groups[which(pts_wgs84_groups$group == i), ]
             if(group_sub[2,]$dateTime <= input$time) {
                 leafletProxy("map", data = group_sub) %>%
-                addPolylines(lng = ~LON, lat = ~LAT, weight = ~INTENSITY/10,
-                             popup = ~STORMTYPE, layerId=~dateTime, opacity = 1.0)
+                    addPolylines(lng = ~LON, lat = ~LAT, weight = ~INTENSITY/10,
+                                 popup = ~STORMTYPE, layerId=~dateTime, opacity = 1.0)
             }
         }
     })
@@ -134,11 +134,11 @@ server <- function(input, output, session) {
                 dyRangeSelector(dateWindow = c("2018-09-11 04:00:00", "2018-09-19 14:00:00"), height = 20) %>%
                 dyLegend(show="never") %>%
                 dyOptions(colors = '#000')
-
+            
         })
     })
-
-
+    
+    
     # Add interaction events
     observeEvent(input$graph_click$x, { # This could identify which line goes to which gage (also on hover)
         cat(file=stderr(), "debug ", input$graph_click$series, "\n")
@@ -152,7 +152,7 @@ server <- function(input, output, session) {
         #         dyOptions(colors = '#000')
         # })
     })
-        
+    
 }
 
 shinyApp(ui, server)
