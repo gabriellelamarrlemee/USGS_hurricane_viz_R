@@ -1,7 +1,5 @@
 setwd("~/Desktop/USGS/hurricane_viz_R/data")
-library(jsonlite)
 library(sf)
-library(geojsonsf)
 library(leaflet)
 library(dygraphs)
 library(reshape2)
@@ -71,8 +69,10 @@ ui <- bootstrapPage(
                               max(precip_merge$time),
                               value = min(precip_merge$time),
                               step=21600, # 1 hour is 3600
-                              animate=T),
-                  dygraphOutput("graph")
+                              animate=T, width=200,
+                              ticks=FALSE, timeFormat="%a %b %o %I%P",
+                              label=NULL),
+                  dygraphOutput("graph", width=300)
     )
 )
 
@@ -96,10 +96,9 @@ server <- function(input, output, session) {
             dyAxis("y", valueRange = c(-18,50)) %>%
             dyRangeSelector(dateWindow = c("2018-09-11 04:00:00", "2018-09-19 14:00:00"), height = 20) %>%
             dyLegend(show="never") %>%
-            dyOptions(colors = '#000') %>% 
-            dyHighlight(highlightSeriesBackgroundAlpha = 1) -> d1
+            dyOptions(colors = '#000')
     })
-    
+
     observe({ # Add precip polygons
         leafletProxy("map", data = subset(precip_merge, time == input$time)) %>%
             removeShape(s) %>%
@@ -134,24 +133,24 @@ server <- function(input, output, session) {
                 dyAxis("y", valueRange = c(-18,50)) %>%
                 dyRangeSelector(dateWindow = c("2018-09-11 04:00:00", "2018-09-19 14:00:00"), height = 20) %>%
                 dyLegend(show="never") %>%
-                dyOptions(colors = '#000') %>% 
-                dyHighlight(highlightSeriesBackgroundAlpha = 1) -> d1
-            
+                dyOptions(colors = '#000')
+
         })
     })
 
 
     # Add interaction events
-    observeEvent(input$map_shape_click, { # This could identify which line goes to which gage (also on hover)
+    observeEvent(input$graph_click$x, { # This could identify which line goes to which gage (also on hover)
+        cat(file=stderr(), "debug ", input$graph_click$series, "\n")
         # on our click let's update the dygraph to only show the time series for the clicked
-        updated <- stream_ts[paste('2018/',as.Date(input$time),sep="")]
-        output$graph <- renderDygraph({
-            dygraph(updated, main = "Water at selected USGS gages", width = '270', height = '700') %>%
-                dyAxis("y", valueRange = c(-18,50)) %>%
-                dyRangeSelector(dateWindow = c("2018-09-11 04:00:00", "2018-09-19 14:00:00"), height = 20) %>%
-                dyLegend(show="never") %>%
-                dyOptions(colors = '#000')
-        })
+        # updated <- stream_ts[paste('2018/',as.Date(input$time),sep="")]
+        # output$graph <- renderDygraph({
+        #     dygraph(updated, main = "Water at selected USGS gages", width = '270', height = '700') %>%
+        #         dyAxis("y", valueRange = c(-18,50)) %>%
+        #         dyRangeSelector(dateWindow = c("2018-09-11 04:00:00", "2018-09-19 14:00:00"), height = 20) %>%
+        #         dyLegend(show="never") %>%
+        #         dyOptions(colors = '#000')
+        # })
     })
         
 }
