@@ -1,0 +1,12 @@
+html,
+body,
+#map {
+  width:100%;
+  height:calc(100vh);
+}
+
+#time {
+  margin-left: auto;
+  margin-right: auto;
+  background-color: #ffffff;
+}

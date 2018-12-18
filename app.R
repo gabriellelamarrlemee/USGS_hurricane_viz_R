@@ -1,11 +1,13 @@
 setwd("~/Desktop/USGS/hurricane_viz_R/data")
+library(jsonlite)
 library(sf)
+library(geojsonsf)
 library(leaflet)
 library(dygraphs)
 library(reshape2)
 library(xts)
 library(shiny)
-
+library(leaflet.minicharts)
 
 # Load data
 precip_data <- readRDS("precip_values_thinned.rds", refhook = NULL)
@@ -14,30 +16,28 @@ gages <- read.csv("all_sites.csv")
 streamdata <- read.csv("streamdata.csv")
 pts <- read_sf("AL062018_pts.shp")
 
-
-
 # Filter the gages
 included <- c(02096500, 02096960, 02099000, 02100500, 02102000, 02102500, 02102908, 02103000,
               02104000, 02104220, 02105500, 02105769, 02106500, 02108000, 02108566)
 streamdata_filtered <- subset(streamdata, site_no %in% included)[,c('site_no','dateTime','X_00065_00000')]
 gages_filtered <- subset(gages, site_no %in% included)
 
-
-
 # Transform data
 spatial_wgs84 <- st_transform(precip_spatial, "+init=epsg:4326") # Add CRS coordinates
 line_wgs84 <- st_transform(line, "+init=epsg:4326") # Add CRS coordinates
 pts_wgs84 <- st_transform(pts, "+init=epsg:4326") # Add CRS coordinates
+
 # Add time dimension to pts
 pts_wgs84$DTG <- as.character(pts_wgs84$DTG)
 pts_wgs84$dateTime <- as.POSIXct(pts_wgs84$DTG, format="%Y%m%d%H",tz=Sys.timezone())
+
 # Duplicate and group points
-pts_wgs84_dup = pts_wgs84[-1,]
+pts_wgs84_dup <- pts_wgs84[-1,]
 pts_wgs84$group <- 1:nrow(pts_wgs84) 
 pts_wgs84_dup$group <- 1:nrow(pts_wgs84_dup) 
 pts_wgs84_groups <- rbind(pts_wgs84,pts_wgs84_dup)
 pts_wgs84_groups <- pts_wgs84_groups[order(pts_wgs84_groups$group),]
-pts_wgs84_groups = pts_wgs84_groups[-145,]
+pts_wgs84_groups <- pts_wgs84_groups[-145,]
 
 # Normalize the stream data by gage flood level
 streamdata_filtered$flood_norm <- streamdata_filtered$X_00065_00000 - subset(gages, site_no == streamdata_filtered$site_no)$flood_stage
@@ -46,33 +46,52 @@ stream_cast <- dcast(streamdata_filtered, dateTime ~ site_no)
 stream_ts <- xts(stream_cast, order.by=stream_cast$dateTime)
 stream_ts <- stream_ts[ , !(names(stream_ts) == 'dateTime')]
 
+# Add lat/lon and name to the streamdata_filtered -- then draw these points and animate shape/color over time
+streamdata_time <- merge(streamdata_filtered, gages_filtered, by="site_no")
+
 # Remove 0 precip from data
 precip_data_sub <- subset(precip_data, precip != 0)
+
 # Link the precip data to precip spatial
 precip_merge <- merge(precip_data_sub, spatial_wgs84, by = 'id', all = TRUE)
 precip_merge <- subset(precip_merge, !is.na(precip))
 precip_merge <- st_sf(precip_merge)
 precip_merge$id <- as.character(precip_merge$id)
 
-
 # Output in Shiny app
 s <- NULL
 
 ui <- bootstrapPage(
     # titlePanel("Hurricane Florence"),
-    tags$style(type = "text/css", "html, body, #map {width:100%;height:calc(100vh)}"),
+    tags$style(type = "text/css", "
+               html, body, #map {width:100%;height:calc(100vh)}
+               .irs-bar {width: 100%; height: 25px; background: black; border: none;}
+               .irs-bar-edge {background: black; border: none; height: 25px; border-radius: 3px; width: 20px;}
+               .irs-line {border: none; height: 25px; border-radius: 0px;}
+               .irs-grid-text {font-family: 'arial'; color: white; bottom: 17px; z-index: 1;}
+               .irs-grid-pol {display: none;}
+               .irs-max {font-family: 'arial'; color: black;}
+               .irs-min {font-family: 'arial'; color: black;}
+               .irs-single {color:black; background:#6666ff;}
+               .irs-slider {width: 30px; height: 30px; top: 22px;}
+               .dygraph-rangesel-bgcanvas {display: none;}
+               .dygraph-rangesel-fgcanvas {display: none;}
+               .dygraph-rangesel-zoomhandle {display: none;}
+               .form-group {padding-left: 26px;}
+               "),
     leafletOutput("map", width="100%", height="100vh"),
-    absolutePanel(top = 30, right = 50,
-                  # style='background-color: #ffffff',
-                  width = 270, height = "auto",
-                  sliderInput("time", "date/time", min(precip_merge$time),
-                              max(precip_merge$time),
-                              value = min(precip_merge$time),
-                              step=21600, # 1 hour is 3600
-                              animate=T, width=200,
-                              ticks=FALSE, timeFormat="%a %b %o %I%P",
-                              label=NULL),
-                  dygraphOutput("graph", width=300)
+    absolutePanel(bottom = 200, right = 0, left = 0, fixed = TRUE,
+                  width = 600, height = 100,
+                  style = "margin-left: auto;margin-right: auto;",
+                  dygraphOutput("graph", width = "100%", height = "200px"),
+                  sliderInput("time", "date/time", 
+                              min = as.POSIXct("2018-09-12 00:00:00"),
+                              max = as.POSIXct("2018-09-19 11:00:00"),
+                              value = as.POSIXct("2018-09-12 00:00:00"),
+                              step = 21600, # 1 hour is 3600
+                              animate = T, width = "100%",
+                              ticks = T, timeFormat = "%a %b %o %I%P",
+                              label = NULL)
     )
 )
 
@@ -90,15 +109,6 @@ server <- function(input, output, session) {
             setView(lng=-76.1637, lat=33.8361, zoom=7)
     })
     
-    output$graph <- renderDygraph({ # Build flooding graphs
-        # All selected on one graph
-        dygraph(stream_ts, main = "Water at selected USGS gages", width = '270', height = '700') %>%
-            dyAxis("y", valueRange = c(-18,50)) %>%
-            dyRangeSelector(dateWindow = c("2018-09-11 04:00:00", "2018-09-19 14:00:00"), height = 20) %>%
-            dyLegend(show="never") %>%
-            dyOptions(colors = '#000')
-    })
-    
     observe({ # Add precip polygons
         leafletProxy("map", data = subset(precip_merge, time == input$time)) %>%
             removeShape(s) %>%
@@ -108,10 +118,36 @@ server <- function(input, output, session) {
         # cat(file=stderr(), "debug ", s, "\n")
     })
     
+    # observe({ # Add gages
+    #     leafletProxy("map", data = subset(streamdata_time, dateTime == input$time)) %>%
+    #         addCircles(lng = ~dec_long_va, 
+    #                    lat = ~dec_lat_va, 
+    #                    weight = ~flood_norm * 10,
+    #                    color = "blue",
+    #                    fillOpacity = 0.15,
+    #                    radius = 20, popup = ~station_nm, layerId=~station_nm)
+    # })
+    # 
+    # 
+    # observe({ # Add gages
+    #     leafletProxy("map", data = gages_filtered) %>%
+    #         addCircles(lng = ~dec_long_va, lat = ~dec_lat_va, weight = 5,
+    #                    color = "blue", fillOpacity = 1,
+    #                    radius = 20, popup = ~station_nm)
+    # })
+    # 
     observe({ # Add gages
-        leafletProxy("map", data = gages_filtered) %>%
-            addCircles(lng = ~dec_long_va, lat = ~dec_lat_va, weight = 5,
-                       radius = 20, popup = ~station_nm, layerId=~station_nm)
+        data <- subset(streamdata_time, dateTime == input$time)
+        leafletProxy("map") %>%
+            addMinicharts(
+                data$dec_long_va, 
+                data$dec_lat_va,
+                chartdata = data$flood_norm,
+                type = "bar"
+            )
+            # addCircles(lng = ~dec_long_va, lat = ~dec_lat_va, weight = 5,
+            #            color = "blue", fillOpacity = 1,
+            #            radius = 20, popup = ~station_nm)
     })
     
     observe({ # Add hurricane path
@@ -129,11 +165,13 @@ server <- function(input, output, session) {
         input$time # Update the time series to align with the map
         updated <- stream_ts[paste('2018/',as.Date(input$time),sep="")]
         output$graph <- renderDygraph({
-            dygraph(updated, main = "Water at selected USGS gages", width = '270', height = '700') %>%
-                dyAxis("y", valueRange = c(-18,50)) %>%
-                dyRangeSelector(dateWindow = c("2018-09-11 04:00:00", "2018-09-19 14:00:00"), height = 20) %>%
+            dygraph(updated, main = "Water level at selected USGS gages", width = '270', height = '700') %>%
+                dyAxis("y", valueRange = c(-18,50), axisLabelWidth = 20) %>%
+                dyAxis("x", drawGrid = FALSE) %>%
+                dyRangeSelector(dateWindow = c("2018-09-12 00:00:00", "2018-09-19 11:00:00"), height = 20) %>%
                 dyLegend(show="never") %>%
-                dyOptions(colors = '#000')
+                dyOptions(colors = '#000', drawGrid = FALSE) %>%
+                dyShading(from = "-20", to = "0", color = "#EFEFEF", axis = "y")
             
         })
     })
@@ -156,7 +194,6 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
-
 
 # NOTES
 # Add colors to the precip data
