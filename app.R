@@ -105,8 +105,11 @@ server <- function(input, output, session) {
         leaflet(options = leafletOptions(zoomControl=FALSE, height="100vh")) %>%
             addProviderTiles(providers$Esri.WorldTopoMap,
                              options = providerTileOptions(opacity = 1)) %>%
-            # addMarkers(lng=-81.1637, lat=33.8361, popup="Test popup") %>%
-            setView(lng=-76.1637, lat=33.8361, zoom=7)
+            setView(lng=-76.1637, lat=33.8361, zoom=7) %>%
+            addMinicharts(lng = streamdata_time$dec_long_va, 
+                          lat = streamdata_time$dec_lat_va, 
+                          layerId = streamdata_time$site_no,
+                          type = "bar")
     })
     
     observe({ # Add precip polygons
@@ -140,10 +143,8 @@ server <- function(input, output, session) {
         data <- subset(streamdata_time, dateTime == input$time)
         leafletProxy("map") %>%
             addMinicharts(
-                data$dec_long_va, 
-                data$dec_lat_va,
-                chartdata = data$flood_norm,
-                type = "bar"
+                layerId = data$site_no,
+                chartdata = data$flood_norm
             )
             # addCircles(lng = ~dec_long_va, lat = ~dec_lat_va, weight = 5,
             #            color = "blue", fillOpacity = 1,
