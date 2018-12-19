@@ -58,6 +58,24 @@ precip_merge <- subset(precip_merge, !is.na(precip))
 precip_merge <- st_sf(precip_merge)
 precip_merge$id <- as.character(precip_merge$id)
 
+new <- data.frame(matrix(ncol = 8, nrow = 0))
+columns <- c("site_no", "dateTime", "X_00065_00000", "flood_norm", "station_nm", "dec_lat_va", "dec_long_va", "flood_stage")
+colnames(new) <- columns
+
+
+for (i in unique(streamdata_time$dateTime)) {
+    for(a in unique(streamdata_time$site_no)) {
+        if(nrow(subset(streamdata_time, dateTime == i & site_no == a))==0) {
+            gage <- subset(gages, site_no == a)
+            row <- c(a, i, NA, NA, NA, gage$dec_lat_va, gage$dec_long_va, 0)
+            new[nrow(new)+1,] <- row
+        }    
+    }
+}
+new$dateTime <- as.POSIXct(new$dateTime, origin = "1970-01-01")
+streamdata_time <- rbind(streamdata_time, new)
+
+
 # Output in Shiny app
 s <- NULL
 
@@ -85,9 +103,9 @@ ui <- bootstrapPage(
                   style = "margin-left: auto;margin-right: auto;",
                   dygraphOutput("graph", width = "100%", height = "200px"),
                   sliderInput("time", "date/time", 
-                              min = as.POSIXct("2018-09-12 00:00:00"),
+                              min = as.POSIXct("2018-09-16 00:00:00"),
                               max = as.POSIXct("2018-09-19 11:00:00"),
-                              value = as.POSIXct("2018-09-12 00:00:00"),
+                              value = as.POSIXct("2018-09-16 00:00:00"),
                               step = 21600, # 1 hour is 3600
                               animate = T, width = "100%",
                               ticks = T, timeFormat = "%a %b %o %I%P",
@@ -169,7 +187,7 @@ server <- function(input, output, session) {
             dygraph(updated, main = "Water level at selected USGS gages", width = '270', height = '700') %>%
                 dyAxis("y", valueRange = c(-18,50), axisLabelWidth = 20) %>%
                 dyAxis("x", drawGrid = FALSE) %>%
-                dyRangeSelector(dateWindow = c("2018-09-12 00:00:00", "2018-09-19 11:00:00"), height = 20) %>%
+                dyRangeSelector(dateWindow = c("2018-09-16 00:00:00", "2018-09-19 11:00:00"), height = 20) %>%
                 dyLegend(show="never") %>%
                 dyOptions(colors = '#000', drawGrid = FALSE) %>%
                 dyShading(from = "-20", to = "0", color = "#EFEFEF", axis = "y")
