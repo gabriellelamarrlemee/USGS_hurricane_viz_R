@@ -8,6 +8,8 @@ library(reshape2)
 library(xts)
 library(shiny)
 library(leaflet.minicharts)
+library(sp)
+library(maptools)
 
 # Load data
 precip_data <- readRDS("precip_values_thinned.rds", refhook = NULL)
@@ -26,6 +28,8 @@ gages_filtered <- subset(gages, site_no %in% included)
 spatial_wgs84 <- st_transform(precip_spatial, "+init=epsg:4326") # Add CRS coordinates
 line_wgs84 <- st_transform(line, "+init=epsg:4326") # Add CRS coordinates
 pts_wgs84 <- st_transform(pts, "+init=epsg:4326") # Add CRS coordinates
+
+pts_sm <- pts_wgs84[, c("LON", "LAT", "INTENSITY", "STORMTYPE", "dateTime")]
 
 # Add time dimension to pts
 pts_wgs84$DTG <- as.character(pts_wgs84$DTG)
@@ -83,29 +87,35 @@ ui <- bootstrapPage(
     # titlePanel("Hurricane Florence"),
     tags$style(type = "text/css", "
                html, body, #map {width:100%;height:calc(100vh)}
-               .irs-bar {width: 100%; height: 25px; background: black; border: none;}
-               .irs-bar-edge {background: black; border: none; height: 25px; border-radius: 3px; width: 20px;}
-               .irs-line {border: none; height: 25px; border-radius: 0px;}
-               .irs-grid-text {font-family: 'arial'; color: white; bottom: 17px; z-index: 1;}
+               .irs {width: 300px; float: left; display: inline-block;}
+               .play {font-size: 18px !important; color: #0f284a !important;}
+               .slider-animate-container {float: right; display: inline-block; height: 60px; width: 50px; margin-top: 20px !important; text-align: center !important;}
+               .irs-bar {width: 300px; height: 10px; background: black; border: none;}
+               .irs-bar-edge {background: black; border: none; height: 10px; border-radius: 50px; width: 20px;}
+               .irs-line {border: none; height: 10px; border-radius: 50px;}
+               .irs-grid-text {font-family: 'arial'; color: transparent; bottom: 17px; z-index: 1;}
                .irs-grid-pol {display: none;}
-               .irs-max {font-family: 'arial'; color: black;}
-               .irs-min {font-family: 'arial'; color: black;}
-               .irs-single {color:black; background:#6666ff;}
-               .irs-slider {width: 30px; height: 30px; top: 22px;}
+               .irs-max {font-family: 'arial'; color: black; visibility: hidden !important;}
+               .irs-min {font-family: 'arial'; color: black; visibility: hidden !important;}
+               .irs-single {color:black; background:transparent; font-size: 14px !important; left: 0 !important;}
+               .irs-slider {width: 18px; height: 18px; top: 20px;}
                .dygraph-rangesel-bgcanvas {display: none;}
                .dygraph-rangesel-fgcanvas {display: none;}
                .dygraph-rangesel-zoomhandle {display: none;}
+               .dygraph-axis-label-x {display: none;}
+               .dygraph-axis-label-y {font-size: 12px;}
+               .dygraph-title {font-size: 16px; margin-bottom: 10px; text-align: left; padding-left: 20px;}
                .form-group {padding-left: 26px;}
                "),
     leafletOutput("map", width="100%", height="100vh"),
-    absolutePanel(bottom = 200, right = 0, left = 0, fixed = TRUE,
-                  width = 600, height = 100,
+    absolutePanel(top = 100, right = 50, fixed = TRUE,
+                  width = 400, height = 100,
                   style = "margin-left: auto;margin-right: auto;",
                   dygraphOutput("graph", width = "100%", height = "200px"),
                   sliderInput("time", "date/time", 
-                              min = as.POSIXct("2018-09-16 00:00:00"),
+                              min = as.POSIXct("2018-09-13 00:00:00"),
                               max = as.POSIXct("2018-09-19 11:00:00"),
-                              value = as.POSIXct("2018-09-16 00:00:00"),
+                              value = as.POSIXct("2018-09-13 00:00:00"),
                               step = 21600, # 1 hour is 3600
                               animate = T, width = "100%",
                               ticks = T, timeFormat = "%a %b %o %I%P",
@@ -126,8 +136,9 @@ server <- function(input, output, session) {
             setView(lng=-76.1637, lat=33.8361, zoom=7) %>%
             addMinicharts(lng = streamdata_time$dec_long_va, 
                           lat = streamdata_time$dec_lat_va, 
-                          layerId = streamdata_time$site_no,
-                          type = "bar")
+                          layerId = streamdata_time$station_nm,
+                          type = "bar", maxValues = 42, 
+                          width = 15, height = 120, fillColor = "#0f284a")
     })
     
     observe({ # Add precip polygons
@@ -136,58 +147,33 @@ server <- function(input, output, session) {
             addPolygons(color = ~precipColor(precip), weight = 0, 
                         smoothFactor = 0.5, opacity = 1.0, fillOpacity = 0.75, layerId=~id)
         s <<- subset(precip_merge, time == input$time)$id
-        # cat(file=stderr(), "debug ", s, "\n")
     })
     
-    # observe({ # Add gages
-    #     leafletProxy("map", data = subset(streamdata_time, dateTime == input$time)) %>%
-    #         addCircles(lng = ~dec_long_va, 
-    #                    lat = ~dec_lat_va, 
-    #                    weight = ~flood_norm * 10,
-    #                    color = "blue",
-    #                    fillOpacity = 0.15,
-    #                    radius = 20, popup = ~station_nm, layerId=~station_nm)
-    # })
-    # 
-    # 
-    # observe({ # Add gages
-    #     leafletProxy("map", data = gages_filtered) %>%
-    #         addCircles(lng = ~dec_long_va, lat = ~dec_lat_va, weight = 5,
-    #                    color = "blue", fillOpacity = 1,
-    #                    radius = 20, popup = ~station_nm)
-    # })
-    # 
     observe({ # Add gages
         data <- subset(streamdata_time, dateTime == input$time)
         leafletProxy("map") %>%
-            addMinicharts(
-                layerId = data$site_no,
+            updateMinicharts(
+                layerId = data$station_nm,
                 chartdata = data$flood_norm
             )
-            # addCircles(lng = ~dec_long_va, lat = ~dec_lat_va, weight = 5,
-            #            color = "blue", fillOpacity = 1,
-            #            radius = 20, popup = ~station_nm)
     })
     
     observe({ # Add hurricane path
-        for (i in unique(pts_wgs84_groups$group)) {
-            group_sub <- pts_wgs84_groups[which(pts_wgs84_groups$group == i), ]
-            if(group_sub[2,]$dateTime <= input$time) {
-                leafletProxy("map", data = group_sub) %>%
-                    addPolylines(lng = ~LON, lat = ~LAT, weight = ~INTENSITY/10,
-                                 popup = ~STORMTYPE, layerId=~dateTime, opacity = 1.0)
-            }
-        }
+        dat <- subset(pts_wgs84, dateTime <= input$time)
+        d <- points_to_line(dat, "LON", "LAT", sort_field = "dateTime")
+        leafletProxy("map", data = d) %>%
+            addPolylines(color="#0f284a", opacity=1, layerId='hurricanePath')
+            # addPolylines(color="#0f284a", opacity=1, weight=~LON/10)
     })
     
     observe({
         input$time # Update the time series to align with the map
-        updated <- stream_ts[paste('2018/',as.Date(input$time),sep="")]
+        updated <- stream_ts[paste('2018/',input$time,sep="")]
         output$graph <- renderDygraph({
             dygraph(updated, main = "Water level at selected USGS gages", width = '270', height = '700') %>%
                 dyAxis("y", valueRange = c(-18,50), axisLabelWidth = 20) %>%
                 dyAxis("x", drawGrid = FALSE) %>%
-                dyRangeSelector(dateWindow = c("2018-09-16 00:00:00", "2018-09-19 11:00:00"), height = 20) %>%
+                dyRangeSelector(dateWindow = c("2018-09-13 00:00:00", "2018-09-19 11:00:00"), height = 20) %>%
                 dyLegend(show="never") %>%
                 dyOptions(colors = '#000', drawGrid = FALSE) %>%
                 dyShading(from = "-20", to = "0", color = "#EFEFEF", axis = "y")
@@ -214,10 +200,53 @@ server <- function(input, output, session) {
 
 shinyApp(ui, server)
 
+
+points_to_line <- function(data, long, lat, id_field = NULL, sort_field = NULL) {
+    
+    data <- data.frame(data)
+    
+    # Convert to SpatialPointsDataFrame
+    coordinates(data) <- c(long, lat)
+    
+    # If there is a sort field...
+    if (!is.null(sort_field)) {
+        if (!is.null(id_field)) {
+            data <- data[order(data[[id_field]], data[[sort_field]]), ]
+        } else {
+            data <- data[order(data[[sort_field]]), ]
+        }
+    }
+    
+    # If there is only one path...
+    if (is.null(id_field)) {
+        
+        lines <- SpatialLines(list(Lines(list(Line(data)), "id")))
+        
+        return(lines)
+        
+        # Now, if we have multiple lines...
+    } else if (!is.null(id_field)) {  
+        
+        # Split into a list by ID field
+        paths <- sp::split(data, data[[id_field]])
+        
+        sp_lines <- SpatialLines(list(Lines(list(Line(paths[[1]])), "line1")))
+        
+        # I like for loops, what can I say...
+        for (p in 2:length(paths)) {
+            id <- paste0("line", as.character(p))
+            l <- SpatialLines(list(Lines(list(Line(paths[[p]])), id)))
+            sp_lines <- spRbind(sp_lines, l)
+        }
+        
+        return(sp_lines)
+    }
+}
+
 # NOTES
 # Add colors to the precip data
+# 0f284a
 # Add a key for the precip data colors
 # Add a key for the hurricane path width data
 # Connect the gages to the lines in the dygraph
 # Make all the lines in the dygraph the same color
-# Remove hurricane path when going back in time on the time scrubber
