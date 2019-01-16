@@ -91,45 +91,50 @@ streamdata_time_new <- rbind(streamdata_time, new)
 
 # Output in Shiny app
 s <- NULL
+a <- 0
 
 ui <- bootstrapPage(
-    # titlePanel("Hurricane Florence"),
+    # titlePanel("Hurricane Florence"), # remove on mobile
     tags$style(type = "text/css", "
                html, body, #map {width:100%;height:calc(100vh)}
                .irs {width: 300px; float: left; display: inline-block;}
-               .play {font-size: 18px !important; color: #0f284a !important;}
-               .pause {font-size: 18px !important; color: #0f284a !important;}
+               .play {font-size: 18px !important; color: #414042 !important;}
+               .pause {font-size: 18px !important; color: #414042 !important;}
                .slider-animate-container {float: right; display: inline-block; height: 60px; width: 50px; margin-top: 18px !important; text-align: left !important;}
-               .irs-bar {width: 300px; height: 10px; background: black; border: none;}
-               .irs-bar-edge {background: black; border: none; height: 10px; border-radius: 50px; width: 20px;}
+               .irs-bar {width: 300px; height: 10px; background: #6d6e71; border: none;}
+               .irs-bar-edge {background: #6d6e71; border: none; height: 10px; border-radius: 50px; width: 20px;}
                .irs-line {border: none; height: 10px; border-radius: 50px;}
                .irs-grid-text {font-family: 'arial'; color: transparent; bottom: 17px; z-index: 1;}
                .irs-grid-pol {display: none;}
                .irs-max {font-family: 'arial'; color: black; visibility: hidden !important;}
                .irs-min {font-family: 'arial'; color: black; visibility: hidden !important;}
-               .irs-single {color:black; background:transparent; font-size: 14px !important; left: 0 !important;}
+               .irs-single {color:#333; background:transparent; font-size: 14px !important; left: 0 !important; font-weight: 600;}
                .irs-slider {width: 18px; height: 18px; top: 20px;}
                .dygraph-rangesel-bgcanvas {display: none;}
                .dygraph-rangesel-fgcanvas {display: none;}
                .dygraph-rangesel-zoomhandle {display: none;}
                .dygraph-axis-label-x {display: none;}
                .dygraph-axis-label-y {font-size: 12px;}
-               .dygraph-title {font-size: 16px; margin-bottom: 10px; text-align: left; padding-left: 20px;}
-               .form-group {padding-left: 26px;}
+               .dygraph-title {font-size: 14px; margin-bottom: 10px; text-align: left; padding-left: 20px;}
+               .form-group {padding-left: 18px;}
+               .shiny-input-container {height: 50px;}
                "),
-    leafletOutput("map", width="100%", height="100vh"),
-    absolutePanel(top = 230, right = 50, fixed = TRUE,
-                  width = 400, height = 100,
+    # leafletOutput("map", width="100%", height="100vh"),
+    leafletOutput("map", width=340, height=400), # mobile version
+    # absolutePanel(top = 230, right = 50, fixed = TRUE,
+    #               width = 400, height = "auto",
+    absolutePanel(top = 280, left = 10, fixed = TRUE, # mobile version
+                  width = 300, height = 100, # mobile version
                   style = "margin-left: auto;margin-right: auto;",
-                  dygraphOutput("graph", width = "100%", height = "200px"),
                   sliderInput("time", "date/time", 
-                              min = as.POSIXct("2018-09-13 00:00:00"),
-                              max = as.POSIXct("2018-09-19 11:00:00"),
-                              value = as.POSIXct("2018-09-13 00:00:00"),
-                              step = 21600, # 1 hour is 3600
-                              animate = T, width = "100%",
-                              ticks = T, timeFormat = "%a %b %o %I%P",
-                              label = NULL)
+                         min = as.POSIXct("2018-09-13 00:00:00"),
+                         max = as.POSIXct("2018-09-19 11:00:00"),
+                         value = as.POSIXct("2018-09-13 00:00:00"),
+                         step = 21600, # 1 hour is 3600
+                         animate = T, width = "100%",
+                         ticks = T, timeFormat = "%a %b %o %I%P",
+                         label = NULL)
+                  # dygraphOutput("graph", width = "100%", height = "200px") # remove on mobile
     )
 )
 
@@ -140,46 +145,47 @@ server <- function(input, output, session) {
                             domain = precip_merge$precip)
     
     output$map <- renderLeaflet({ # Build map
-        leaflet(options = leafletOptions(zoomControl=FALSE, height="100vh")) %>%
+        leaflet() %>%
             addMapPane(name = "polygons", zIndex = 410) %>% 
             addMapPane(name = "maplabels", zIndex = 420) %>%
             addProviderTiles(providers$CartoDB.PositronNoLabels,
             # addProviderTiles(providers$Esri.WorldTopoMap,
-                             options = providerTileOptions(opacity = 1)) %>%
+                             options = providerTileOptions(opacity = 0.6)) %>%
             addProviderTiles("CartoDB.PositronOnlyLabels", 
                              options = leafletOptions(pane = "maplabels"),
                              group = "map labels") %>%
-            setView(lng=-76.1637, lat=33.8361, zoom=7) %>%
-            addMinicharts(lng = streamdata_time_new$dec_long_va, 
-                          lat = streamdata_time_new$dec_lat_va, 
+            # setView(lng=-78.497110, lat=34.643180, zoom=8) %>%
+            setView(lng=-77.8868, lat=33.2, zoom=6) %>% # mobile version
+            addMinicharts(lng = streamdata_time_new$dec_long_va,
+                          lat = streamdata_time_new$dec_lat_va,
                           layerId = streamdata_time_new$station_nm,
-                          type = "bar", maxValues = 42, 
-                          width = 15, height = 120, fillColor = "#226eae")
+                          type = "bar", maxValues = 42,
+                          width = 20, height = 120, fillColor = "#226eae")
     })
     
     
     observe({ # Add hurricane path
         dat <- pts_wgs84[ which(pts_wgs84$dateTime <= input$time), ]
-        leafletProxy("map") %>% clearGroup("hurricane path")
         for (i in 1:nrow(dat)) {
             dat.sub <- dat[i:(i+1),]
             leafletProxy("map", data = dat.sub) %>%
-                addPolylines(lng=~LON, lat=~LAT, color="#aababf", 
-                             opacity=1, layerId=paste('hurricanePath',i,sep="_"), 
-                             options = leafletOptions(pane = "polygons"),
-                             group = "hurricane path",
+                addPolylines(lng=~LON, lat=~LAT, color="#bcbec0", 
+                             opacity=1, options = leafletOptions(pane = "polygons"),
+                             group = paste("hurricane path",a,sep="_"),
                              weight=~ifelse(STORMTYPE == 'DB', 1, 
-                                           ifelse(STORMTYPE == 'LO', 5,
-                                                  ifelse(STORMTYPE =='TD', 10,
-                                                         ifelse(STORMTYPE == 'TS', 15, 30)))))
+                                           ifelse(STORMTYPE == 'LO', 1,
+                                                  ifelse(STORMTYPE =='TD', 1,
+                                                         ifelse(STORMTYPE == 'TS', 6, 24)))))
         }
+        leafletProxy("map") %>% clearGroup(paste("hurricane path",a-1,sep="_"))
+        a <<- a + 1
     })
     
     observe({ # Add precip polygons
         leafletProxy("map", data = subset(precip_merge, time == input$time)) %>%
             removeShape(s) %>%
             addPolygons(color = ~precipColor(precip), weight = 0, 
-                        smoothFactor = 0.5, opacity = 0.45, fillOpacity = 0.45, layerId=~id,
+                        smoothFactor = 0.5, opacity = 0.35, fillOpacity = 0.35, layerId=~id,
                         options = leafletOptions(pane = "polygons"))
         s <<- subset(precip_merge, time == input$time)$id
     })
@@ -190,51 +196,50 @@ server <- function(input, output, session) {
             updateMinicharts(
                 layerId = data$station_nm,
                 chartdata = data$flood_norm,
-                opacity = ifelse(data$flood_norm < 0, 0.25, 1)
+                opacity = ifelse(data$flood_norm < 0, 0.2, 1)
             )
     })
     
-    observe({
-        input$time # Update the time series to align with the map
-        updated <- stream_ts[paste('2018/',input$time,sep="")]
-        output$graph <- renderDygraph({
-            dygraph(updated, main = "Water level at selected USGS gages", width = '270', height = '700') %>%
-                dyAxis("y", valueRange = c(-18,50), axisLabelWidth = 20) %>%
-                dyAxis("x", drawGrid = FALSE) %>%
-                dyRangeSelector(dateWindow = c("2018-09-13 00:00:00", "2018-09-19 11:00:00"), height = 20) %>%
-                dyLegend(show="never") %>%
-                dyOptions(drawGrid = FALSE) %>%
-                dyLimit(limit=0, label = "flooding level", labelLoc = "left",
-                        color = "black", strokePattern = "dashed") %>%
-                # dyShading(from = "-20", to = "0", color = "#EFEFEF", axis = "y") %>%
-                dyHighlight(highlightCircleSize = 0, highlightSeriesBackgroundAlpha = 1)  %>%
-                # Below 0 is #a4aeb6
-                dySeries("2096500B", color = "#aababf", strokePattern = "dotted") %>%
-                dySeries("2096960B", color = "#aababf", strokePattern = "dotted") %>%
-                dySeries("2100500B", color = "#aababf", strokePattern = "dotted") %>%
-                dySeries("2102000B", color = "#aababf", strokePattern = "dotted") %>%
-                dySeries("2102500B", color = "#a4aeb6", strokePattern = "dotted") %>%
-                dySeries("2103000B", color = "#a4aeb6", strokePattern = "dotted") %>%
-                dySeries("2104000B", color = "#a4aeb6", strokePattern = "dotted") %>%
-                dySeries("2105769B", color = "#a4aeb6", strokePattern = "dotted") %>%
-                dySeries("2106500B", color = "#a4aeb6", strokePattern = "dotted") %>%
-                dySeries("2108000B", color = "#a4aeb6", strokePattern = "dotted") %>%
-                dySeries("2108566B", color = "#a4aeb6", strokePattern = "dotted") %>%
-                # Above 0 is #0f284a
-                dySeries("2096500A", color = "#0f284a") %>%
-                dySeries("2096960A", color = "#0f284a") %>%
-                dySeries("2100500A", color = "#0f284a") %>%
-                dySeries("2102000A", color = "#0f284a") %>%
-                dySeries("2102500A", color = "#0f284a") %>%
-                dySeries("2103000A", color = "#0f284a") %>%
-                dySeries("2104000A", color = "#0f284a") %>%
-                dySeries("2105769A", color = "#0f284a") %>%
-                dySeries("2106500A", color = "#0f284a") %>%
-                dySeries("2108000A", color = "#0f284a") %>%
-                dySeries("2108566A", color = "#0f284a") 
-    
-        })
-    })
+    # observe({ # remove on mobile version
+    #     input$time # Update the time series to align with the map
+    #     updated <- stream_ts[paste('2018/',input$time,sep="")]
+    #     output$graph <- renderDygraph({
+    #         dygraph(updated, main = "Water level at selected USGS gages", width = '270', height = '700') %>%
+    #             dyAxis("y", valueRange = c(-18,50), axisLabelWidth = 20) %>%
+    #             dyAxis("x", drawGrid = FALSE) %>%
+    #             dyRangeSelector(dateWindow = c("2018-09-13 00:00:00", "2018-09-19 11:00:00"), height = 20) %>%
+    #             dyLegend(show="never") %>%
+    #             dyOptions(drawGrid = FALSE) %>%
+    #             dyLimit(limit=0, label = "flooding level", labelLoc = "left",
+    #                     color = "#414042", strokePattern = "solid") %>%
+    #             dyHighlight(highlightCircleSize = 0, highlightSeriesBackgroundAlpha = 1)  %>%
+    #             # Below 0 is #a4b5d8
+    #             dySeries("2096500B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2096960B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2100500B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2102000B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2102500B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2103000B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2104000B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2105769B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2106500B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2108000B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             dySeries("2108566B", color = "#a4b5d8", strokePattern = "dotted") %>%
+    #             # Above 0 is #226eae
+    #             dySeries("2096500A", color = "#226eae") %>%
+    #             dySeries("2096960A", color = "#226eae") %>%
+    #             dySeries("2100500A", color = "#226eae") %>%
+    #             dySeries("2102000A", color = "#226eae") %>%
+    #             dySeries("2102500A", color = "#226eae") %>%
+    #             dySeries("2103000A", color = "#226eae") %>%
+    #             dySeries("2104000A", color = "#226eae") %>%
+    #             dySeries("2105769A", color = "#226eae") %>%
+    #             dySeries("2106500A", color = "#226eae") %>%
+    #             dySeries("2108000A", color = "#226eae") %>%
+    #             dySeries("2108566A", color = "#226eae") 
+    # 
+    #     })
+    # })
 
     
 }
