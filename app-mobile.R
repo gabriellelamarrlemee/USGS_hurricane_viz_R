@@ -94,17 +94,16 @@ s <- NULL
 a <- 0
 
 ui <- bootstrapPage(
-    # titlePanel("Hurricane Florence"),
     tags$style(type = "text/css", "
                html, body, #map {width:100%;height:calc(100vh)}
-               .irs {width: 300px; float: left; display: inline-block;}
+               .irs {width: 250px; float: left; display: inline-block;}
                .play {font-size: 18px !important; color: #414042 !important;}
                .pause {font-size: 18px !important; color: #414042 !important;}
-               .slider-animate-container {float: right; display: inline-block; height: 60px; width: 50px; margin-top: 18px !important; text-align: left !important;}
-               .irs-bar {width: 300px; height: 10px; background: #6d6e71; border: none;}
+               .slider-animate-container {float: right; display: inline-block; height: 60px; width: 25px; margin-top: 18px !important; text-align: left !important;}
+               .irs-bar {width: 250px; height: 10px; background: #6d6e71; border: none;}
                .irs-bar-edge {background: #6d6e71; border: none; height: 10px; border-radius: 50px; width: 20px;}
                .irs-line {border: none; height: 10px; border-radius: 50px;}
-               .irs-grid-text {display:none; font-family: 'arial'; color: transparent; bottom: 17px; z-index: 1;}
+               .irs-grid-text {display: none; font-family: 'arial'; color: transparent; bottom: 17px; z-index: 1;}
                .irs-grid-pol {display: none;}
                .irs-max {font-family: 'arial'; color: black; visibility: hidden !important;}
                .irs-min {font-family: 'arial'; color: black; visibility: hidden !important;}
@@ -119,9 +118,9 @@ ui <- bootstrapPage(
                .form-group {padding-left: 18px;}
                .shiny-input-container {height: 50px;}
                "),
-    leafletOutput("map", width="100%", height="100vh"),
-    absolutePanel(top = 230, right = 50, fixed = TRUE,
-                  width = 400, height = "auto",
+    leafletOutput("map", width=340, height=400), # mobile version
+    absolutePanel(top = 320, left = 10, fixed = TRUE, # mobile version
+                  width = 300, height = 100, # mobile version
                   style = "margin-left: auto;margin-right: auto;",
                   sliderInput("time", "date/time", 
                          min = as.POSIXct("2018-09-13 00:00:00"),
@@ -130,8 +129,7 @@ ui <- bootstrapPage(
                          step = 21600, # 1 hour is 3600
                          animate = T, width = "100%",
                          ticks = T, timeFormat = "%a %b %o %I%P",
-                         label = NULL),
-                  dygraphOutput("graph", width = "100%", height = "200px")
+                         label = NULL)
     )
 )
 
@@ -151,7 +149,7 @@ server <- function(input, output, session) {
             addProviderTiles("CartoDB.PositronOnlyLabels", 
                              options = leafletOptions(pane = "maplabels"),
                              group = "map labels") %>%
-            setView(lng=-78.497110, lat=34.643180, zoom=8) %>%
+            setView(lng=-78.781323, lat=34.541713, zoom=7) %>% # mobile version
             addMinicharts(lng = streamdata_time_new$dec_long_va,
                           lat = streamdata_time_new$dec_lat_va,
                           layerId = streamdata_time_new$station_nm,
@@ -195,50 +193,8 @@ server <- function(input, output, session) {
                 opacity = ifelse(data$flood_norm < 0, 0.2, 1)
             )
     })
-    
-    observe({ 
-        input$time # Update the time series to align with the map
-        updated <- stream_ts[paste('2018/',input$time,sep="")]
-        output$graph <- renderDygraph({
-            dygraph(updated, main = "Water level at selected USGS gages", width = '270', height = '700') %>%
-                dyAxis("y", valueRange = c(-18,50), axisLabelWidth = 20) %>%
-                dyAxis("x", drawGrid = FALSE) %>%
-                dyRangeSelector(dateWindow = c("2018-09-13 00:00:00", "2018-09-19 11:00:00"), height = 20) %>%
-                dyLegend(show="never") %>%
-                dyOptions(drawGrid = FALSE) %>%
-                dyLimit(limit=0, label = "flooding level", labelLoc = "left",
-                        color = "#414042", strokePattern = "solid") %>%
-                dyHighlight(highlightCircleSize = 0, highlightSeriesBackgroundAlpha = 1)  %>%
-                # Below 0 is #a4b5d8
-                dySeries("2096500B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2096960B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2100500B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2102000B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2102500B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2103000B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2104000B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2105769B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2106500B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2108000B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                dySeries("2108566B", color = "#a4b5d8", strokePattern = "dotted") %>%
-                # Above 0 is #226eae
-                dySeries("2096500A", color = "#226eae") %>%
-                dySeries("2096960A", color = "#226eae") %>%
-                dySeries("2100500A", color = "#226eae") %>%
-                dySeries("2102000A", color = "#226eae") %>%
-                dySeries("2102500A", color = "#226eae") %>%
-                dySeries("2103000A", color = "#226eae") %>%
-                dySeries("2104000A", color = "#226eae") %>%
-                dySeries("2105769A", color = "#226eae") %>%
-                dySeries("2106500A", color = "#226eae") %>%
-                dySeries("2108000A", color = "#226eae") %>%
-                dySeries("2108566A", color = "#226eae")
-
-        })
-    })
 
     
 }
 
 shinyApp(ui, server)
-
